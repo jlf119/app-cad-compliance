@@ -2,11 +2,11 @@
   "version": 2,
   "builds": [
     { "src": "api/index.py", "use": "@vercel/python" },
-    { "src": "web/package.json", "use": "@vercel/next" }
+    { "src": "package.json", "use": "@vercel/static-build" }
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "api/index.py" },
-    { "src": "/(.*)", "dest": "web" }
+    { "src": "/(.*)", "dest": "public/$1" }
   ],
-  "buildCommand": "cd web && npm install && npm run build"
+  "buildCommand": "npm run vercel-build"
 }

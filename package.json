@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "description": "A sample app to view glTF files exported from OnShape.",
   "scripts": {
-    "build": "rollup -c"
+    "build": "rollup -c",
+    "vercel-build": "rollup -c"
   },
   "author": "Ron Gajdos <rgajdos@ptc.com>",
   "license": "MIT",
