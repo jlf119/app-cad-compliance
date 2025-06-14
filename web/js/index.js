@@ -337,3 +337,5 @@ $downloadGltfElem.onclick = () => {
         document.body.removeChild(downloadLink);
     }
 };
+
+// No changes needed, but ensure this file is referenced as 'js/index.js' from public/index.html
