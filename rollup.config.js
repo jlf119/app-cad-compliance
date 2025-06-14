@@ -4,7 +4,7 @@ import resolve from '@rollup/plugin-node-resolve';
 export default {
     input: 'web/js/index.js',
     output: {
-        file: 'dist/main.js',
+        file: 'public/js/index.js',
         format: 'iife'
     },
     plugins: [
