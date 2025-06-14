@@ -248,94 +248,147 @@ const removeError = () => {
     isError = false;
     const $viewport = document.getElementById('gltf-viewport');
     let $msgElem = document.getElementById('error-div');
-    if ($msgElem) $viewport.removeChild($msgElem);
+    if ($msgElem && $viewport) $viewport.removeChild($msgElem); // Added null check for $viewport
 }
 
-if (!WEBGL.isWebGLAvailable()) {
-    console.error('WebGL is not supported in this browser');
-    document.getElementById('gltf-viewport').appendChild(WEBGL.getWebGLErrorMessage());
-}
-
-const { loadGltf, clearGltfCanvas, exportGltf } = initThreeJsElements();
-
-$elemSelector.addEventListener('change', async (evt) => {
-    // Trigger translation by getting /api/gltf
-    const selectedOption = evt.target.options[event.target.selectedIndex];
-    clearGltfCanvas();
-    if (selectedOption.innerText !== 'Select an Element') {
-        try {
-            document.body.style.cursor = 'progress';
-            const resp = await fetch(`/api/gltf${evt.target.options[event.target.selectedIndex].getAttribute('href')}`);
-            const json = await resp.json();
-            poll(5, () => fetch(`/api/gltf/${json.id}`), (resp) => resp.status !== 202, (resp) => {
-                let respJson = JSON.parse(resp);
-                if (respJson.error) {
-                    displayError('There was an error translating the model to GLTF: ' + respJson.error);
-                } else {
-                    console.log('Loading GLTF data...');
-                    loadGltf(resp);
-                }
-            });
-        } catch (err) {
-            displayError(`Error requesting GLTF data translation: ${err}`);
-        }
+function main() {
+    const $viewport = document.getElementById('gltf-viewport');
+    if (!$viewport) {
+        console.error("Element with ID \'gltf-viewport\' not found.");
+        return; // Stop if essential viewport element is missing
     }
-});
 
-// Get the Elements for the dropdown
-fetch(`/api/elements${window.location.search}`, { headers: { 'Accept': 'application/json' } })
-    .then((resp) => resp.json())
-    .then(async (json) => {
-        for (const elem of json) {
-            if (elem.elementType === 'PARTSTUDIO') {
-                const child = document.createElement('option');
-                child.setAttribute('href', `${window.location.search}&gltfElementId=${elem.id}`);
-                child.innerText = `Element - ${elem.name}`;
-                $elemSelector.appendChild(child);
-                // Get the Parts of each element for the dropdown
+    if (!WEBGL.isWebGLAvailable()) {
+        console.error('WebGL is not supported in this browser');
+        $viewport.appendChild(WEBGL.getWebGLErrorMessage());
+        return; // Stop execution if WebGL is not available
+    }
+
+    const { loadGltf, clearGltfCanvas, exportGltf } = initThreeJsElements();
+
+    const $elemSelector = document.getElementById('elem-selector');
+    if ($elemSelector) {
+        $elemSelector.addEventListener('change', async (evt) => {
+            const selectedOption = evt.target.options[evt.target.selectedIndex];
+            clearGltfCanvas();
+            if (selectedOption.innerText !== 'Select an Element') {
                 try {
-                    const partsResp = await fetch(`/api/elements/${elem.id}/parts${window.location.search}`, { headers: { 'Accept': 'application/json' }});
-                    const partsJson = await partsResp.json();
-                    for (const part of partsJson) {
-                        const partChild = document.createElement('option');
-                        partChild.setAttribute('href', `${window.location.search}&gltfElementId=${part.elementId}&partId=${part.partId}`);
-                        partChild.innerText = `Part - ${elem.name} - ${part.name}`;
-                        $elemSelector.appendChild(partChild);
+                    document.body.style.cursor = 'progress';
+                    const href = selectedOption.getAttribute('href'); // Get href from selected option
+                    if (!href) {
+                        displayError('Selected option does not have a valid href.');
+                        document.body.style.cursor = 'default';
+                        return;
                     }
-                } catch(err) {
-                    displayError(`Error while requesting element parts: ${err}`);
+                    const initialResp = await fetch(`/api/gltf${href}`);
+                    if (!initialResp.ok) {
+                        throw new Error(`Failed to initiate GLTF translation: ${initialResp.status} ${initialResp.statusText}`);
+                    }
+                    const json = await initialResp.json();
+                    if (!json.id) {
+                        throw new Error('Translation ID not found in response.');
+                    }
+                    poll(5, 
+                        () => fetch(`/api/gltf/${json.id}`),
+                        (pollResp) => pollResp.status !== 202, 
+                        async (finalRespBody) => { // Changed to async, renamed to finalRespBody
+                            try {
+                                let respJson = JSON.parse(finalRespBody);
+                                if (respJson.error) {
+                                    displayError('There was an error translating the model to GLTF: ' + respJson.error);
+                                } else {
+                                    console.log('Loading GLTF data...');
+                                    loadGltf(finalRespBody); // Pass the string response body
+                                }
+                            } catch (parseError) {
+                                displayError(`Error parsing GLTF response: ${parseError}`);
+                            }
+                            document.body.style.cursor = 'default'; // Reset cursor after poll finishes
+                        }
+                    );
+                } catch (err) {
+                    displayError(`Error requesting GLTF data translation: ${err}`);
+                    document.body.style.cursor = 'default';
                 }
-            } else if (elem.elementType === 'ASSEMBLY') {
-                const child = document.createElement('option');
-                child.setAttribute('href', `${window.location.search}&gltfElementId=${elem.id}`);
-                child.innerText = `Assembly - ${elem.name}`;
-                $elemSelector.appendChild(child);
             }
-        }
-    }).catch((err) => {
-        displayError(`Error while requesting document elements: ${err}`);
-    });
-
-const $downloadGltfElem = document.getElementById('download-gltf');
-$downloadGltfElem.onclick = () => {
-    const selectedElem = $elemSelector.options[$elemSelector.selectedIndex];
-    if (selectedElem.innerText === 'Select an Element') {
-        return;
+        });
     } else {
-        if (isError) {
-            displayError('Could not download GLTF, errors exist within the selected model.');
-            return;
-        }
-        let dataBlob = exportGltf();
-        let downloadLink = document.createElement('a');
-        downloadLink.target = "_blank";
-        downloadLink.style.display = 'none';
-        downloadLink.href = dataBlob;
-        downloadLink.download = selectedElem.innerText + '.gltf';
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        document.body.removeChild(downloadLink);
+        console.error("Element with ID \'elem-selector\' not found.");
     }
-};
 
-// No changes needed, but ensure this file is referenced as 'js/index.js' from public/index.html
+    fetch(`/api/elements${window.location.search}`, { headers: { 'Accept': 'application/json' } })
+        .then((resp) => {
+            if (!resp.ok) {
+                throw new Error(`HTTP error! status: ${resp.status} fetching elements`);
+            }
+            return resp.json();
+        })
+        .then(async (json) => {
+            if (!$elemSelector) return;
+            for (const elem of json) {
+                if (elem.elementType === 'PARTSTUDIO') {
+                    const child = document.createElement('option');
+                    child.setAttribute('href', `${window.location.search}${window.location.search ? '&' : '?'}gltfElementId=${elem.id}`);
+                    child.innerText = `Element - ${elem.name}`;
+                    $elemSelector.appendChild(child);
+                    try {
+                        const partsResp = await fetch(`/api/elements/${elem.id}/parts${window.location.search}`, { headers: { 'Accept': 'application/json' }});
+                        if (!partsResp.ok) {
+                            throw new Error(`HTTP error! status: ${partsResp.status} for parts of ${elem.name}`);
+                        }
+                        const partsJson = await partsResp.json();
+                        for (const part of partsJson) {
+                            const partChild = document.createElement('option');
+                            partChild.setAttribute('href', `${window.location.search}${window.location.search ? '&' : '?'}gltfElementId=${part.elementId}&partId=${part.partId}`);
+                            partChild.innerText = `Part - ${elem.name} - ${part.name}`;
+                            $elemSelector.appendChild(partChild);
+                        }
+                    } catch(err) {
+                        displayError(`Error while requesting element parts for ${elem.name}: ${err}`);
+                    }
+                } else if (elem.elementType === 'ASSEMBLY') {
+                    const child = document.createElement('option');
+                    child.setAttribute('href', `${window.location.search}${window.location.search ? '&' : '?'}gltfElementId=${elem.id}`);
+                    child.innerText = `Assembly - ${elem.name}`;
+                    $elemSelector.appendChild(child);
+                }
+            }
+        }).catch((err) => {
+            displayError(`Error while requesting document elements: ${err}`);
+        });
+
+    const $downloadGltfElem = document.getElementById('download-gltf');
+    if ($downloadGltfElem && $elemSelector) {
+        $downloadGltfElem.onclick = () => {
+            const selectedElem = $elemSelector.options[$elemSelector.selectedIndex];
+            if (selectedElem.innerText === 'Select an Element') {
+                return;
+            }
+            if (isError) {
+                displayError('Could not download GLTF, errors exist within the selected model.');
+                return;
+            }
+            let dataBlob = exportGltf();
+            if (!dataBlob) { // Check if exportGltf returned something
+                displayError('Failed to export GLTF data. Is a model loaded?');
+                return;
+            }
+            let downloadLink = document.createElement('a');
+            downloadLink.target = "_blank";
+            downloadLink.style.display = 'none';
+            downloadLink.href = dataBlob;
+            downloadLink.download = selectedElem.innerText.replace(/[^a-zA-Z0-9_\\-\\.]/g, '_') + '.gltf'; // Sanitize filename
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        };
+    } else {
+        if (!$downloadGltfElem) console.error("Element with ID \'download-gltf\' not found.");
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', main);
+} else {
+    main();
+}
