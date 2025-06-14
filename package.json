@@ -1,5 +1,5 @@
 {
-  "name": "app-gltf-viewer",
+  "name": "cad-compliance",
   "version": "0.1.0",
   "description": "A sample app to view glTF files exported from OnShape.",
   "scripts": {
